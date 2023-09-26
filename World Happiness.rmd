@@ -1,0 +1,492 @@
+---
+author: "Eitan & Yuval Bakirov"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    css: styles.css
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+![](World-Happiness-Report.png) 
+
+***
+
+<p style="text-align:center; font-weight: bold; font-size: 20px;">Eitan and Yuval Bakirov</p>
+<p style="text-align:center; font-size: 20px;">--June 2022--</p>
+
+***  
+  
+\
+
+## Introduction 
+
+The World Happiness Report is a landmark survey of the state of global happiness. 
+The first report was published in 2012 and since then every year these reports have been distributed regularly.\
+The World Happiness 2017, which ranks 155 countries by their happiness levels, was released at the United Nations at an event celebrating International Day of Happiness on March 20th. 
+The report continues to gain global recognition as governments, organizations and civil society increasingly use happiness indicators to inform their policy-making decisions. 
+Leading experts across fields – economics, psychology, survey analysis, national statistics, health, public policy and more – describe how measurements of well-being can be used effectively to assess the progress of nations.
+The reports review the state of happiness in the world today and show how the new science of happiness explains personal and national variations in happiness.
+\
+\
+<center>[World Happiness Report - Website](https://worldhappiness.report/)</center>
+
+\
+
+### Goals
+
+Our goal is to see the correlation between the happiness of countries to other statistical data, such as, GDP per capita of each country, its' healthy life expectancy, generosity etc.
+
+\
+In our project we will focus on:\
+
+* Tidy our data set
+* Visualizations
+* Statistical Models and methods learned during the course
+\
+\
+
+The methods which we will use in this research are:
+
+  1. Hypothesis test - difference in means - we want to test the assumption that the median happiness     score went up over the years.
+  \
+  For this reason we will perform a T-Test.
+
+  2. Model of multiple regression - we want to examine the effect of explanatory variables on the level   of happiness (the explained variable). 
+  We will perform tests to draw conclusions using Summary Statistics Table.
+       
+\
+
+### <ins>Part One - Data Import And Tidying</ins>
+\
+
+#### Data import
+
+```{r Readind the data, warning=FALSE, message=FALSE, eval=TRUE}
+
+library(tidyverse)
+library(gridExtra)
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(ggcorrplot)
+library(car)
+library(DT)
+library(rio)
+
+
+whr2015 <- read_csv("2015.csv")
+whr2019 <- read_csv("2019.csv")
+
+```
+\
+
+#### Data Tidy:
+
+We will start by arranging the tables so that they will be easy to read. 
+
+Delete irrelevant data columns and countries that do not appear in one of the tables.
+
+(All the data is taken from Kaggle - [World Happiness Report - Kaggle](https://www.kaggle.com/datasets/unsdsn/world-happiness))
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE}
+
+colnames(whr2015) <- c('Country', 'Region', 'CUT' , 'Happiness_Score', 'CUT', 'GDP_per_capita', 'CUT',
+                       'Life_Expectency', 'Freedom','Corruption', 'Generosity', 'CUT' )
+
+colnames(whr2019) <- c('CUT', 'Country', 'Happiness_Score', 'GDP_per_capita', 'CUT', 'Life_Expectency',
+                       'Freedom','Generosity', 'Corruption' )
+
+whr2019$Region <- whr2015$Region[match(whr2019$Country, whr2015$Country)]
+
+whr2015 <- whr2015[ , -which(names(whr2015) %in% c('CUT'))]
+whr2019 <- whr2019[ , -which(names(whr2019) %in% c('CUT'))]
+
+whr2015 <- whr2015[, c(1,2,3,4,5,6,8,7)]
+whr2019 <- whr2019[, c(1,8,2,3,4,5,6,7)]
+
+common <- intersect(whr2015$Country, whr2019$Country)
+
+whr2015 = filter(whr2015, Country %in% common)
+whr2019 = filter(whr2019, Country %in% common)
+
+
+datatable(whr2019, rownames = FALSE, 
+          options = list(columnDefs = list(list(className = 'dt-center', targets = 5)),
+                         pageLength = 5,lengthMenu = c(5, 10, 15, 20)))
+```
+
+
+\
+
+### <ins>Part Two - Visualizations</ins>
+
+In order to get to understand our data better we will visualize it using GGPlot package.
+
+First of all, we will plot the different variables using histograms:
+
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+happiness_score_dist <- ggplot(whr2019, aes(x=Happiness_Score)) +
+  geom_histogram(bins = 50, color="black", fill="lightblue")
+
+gdp_dist <- ggplot(whr2019, aes(x=GDP_per_capita)) +
+  geom_histogram(bins = 50, color="black", fill="lightblue")
+
+life_expectency_dist <- ggplot(whr2019, aes(x=Life_Expectency)) +
+  geom_histogram(bins = 50, color="black", fill="lightblue")
+
+generosity_dist <- ggplot(whr2019, aes(x=Generosity)) +
+  geom_histogram(bins = 50, color="black", fill="lightblue")
+
+grid.arrange(happiness_score_dist, gdp_dist,life_expectency_dist,generosity_dist)
+
+```
+\
+\
+
+A slightly different look at the table grouped by regions.
+
+```{r}
+
+whr2019 %>% 
+  group_by(Region)%>%
+  summarize(
+    mean_Score = mean(Happiness_Score),
+    mean_GDP = mean(GDP_per_capita),
+    mean_LE = mean(Life_Expectency),
+    mean_Generosity = mean(Generosity)
+  )
+
+whr2015 %>%
+  group_by(Region)%>%
+  summarize(
+    mean_Score = mean(Happiness_Score),
+    mean_GDP = mean(GDP_per_capita),
+    mean_LE = mean(Life_Expectency),
+    mean_Generosity = mean(Generosity)
+  )
+```
+\
+Using geometric points to draw a conclusion about the level of happiness and GDP product by regions.
+
+We can understand which areas have a higher level of happiness and product.
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+# Calculate the mean values for whr2015
+mean_data_2015 <- whr2015 %>%
+  group_by(Region) %>%
+  summarize(
+    mean_Score = mean(Happiness_Score),
+    mean_GDP = mean(GDP_per_capita)
+  )
+
+# Create the scatterplot with only mean points
+ggplot(mean_data_2015, aes(x = mean_Score, y = mean_GDP, color = Region)) +
+  geom_point(size = 3, shape = 19) +  # Plot mean points
+  labs(title = "Mean Happiness Score vs. Mean GDP per Capita (by Region) in 2015",
+    x = "Mean Happiness Score",
+    y = "Mean GDP per Capita") +
+  theme_minimal()
+
+
+```
+\
+Western Europe, Australia and New Zealand and North America have a have a higher level of happiness and product. Whereas Sub-Saharan Africa and Southern Asia are on the lower level in both metrics.
+
+We can also conclude from these mean points that as the level of happiness rises, the GDP per capita
+rises as well and vise versa.
+
+Now let's look at 2019 data:
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+# Calculate the mean values for whr2015
+mean_data_2019 <- whr2019 %>%
+  group_by(Region) %>%
+  summarize(
+    mean_Score = mean(Happiness_Score),
+    mean_GDP = mean(GDP_per_capita)
+  )
+
+# Create the scatterplot with only mean points
+ggplot(mean_data_2019, aes(x = mean_Score, y = mean_GDP, color = Region)) +
+  geom_point(size = 3, shape = 19) +  # Plot mean points
+  labs(title = "Mean Happiness Score vs. Mean GDP per Capita (by Region) in 2019",
+    x = "Mean Happiness Score",
+    y = "Mean GDP per Capita") +
+  theme_minimal()
+
+
+```
+\
+Seems like not much changed in 2019.
+
+\
+
+
+#### Density of the different variables:
+
+In order to be more confident about our distribution of the data, we will use geom_density function to visualize the bell shaped graph.
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+data_density <- ggplot(whr2019) +
+  geom_density(aes(Happiness_Score, fill="Happiness score", alpha=0.1)) + 
+  geom_density(aes(GDP_per_capita, fill="GDP per capita", alpha=0.1)) + 
+  geom_density(aes(Life_Expectency, fill="Life expectency", alpha=0.1)) + 
+  geom_density(aes(Generosity, fill="Generosity", alpha=0.1)) + 
+    scale_x_continuous(name = "Variables") +
+  ggtitle("Distribution of the data") + 
+  guides(alpha = FALSE)  # Remove alpha from legend
+
+plot(data_density)
+
+```
+\
+As we can see the different variables do have a bell shaped distribution.
+
+But to be even more confident we will now use QQPlot Graph.
+
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+happy_qq <- ggplot(whr2019, aes(sample=Happiness_Score)) +
+  geom_qq(color = "honeydew3") + geom_qq_line(col="red") + theme_bw() +
+    labs(x= "Happiness Score") 
+
+gdp_qq <- ggplot(whr2019, aes(sample=GDP_per_capita)) +
+  geom_qq(color = "honeydew3") + geom_qq_line(col="red") +theme_bw() +
+    labs(x= "GDP per capita")
+
+life_expectency_qq <- ggplot(whr2019, aes(sample=Life_Expectency)) +
+  geom_qq(color = "honeydew3") + geom_qq_line(col="red") + theme_bw() +
+    labs(x= "Life Expectency")
+
+generosity_qq <- ggplot(whr2019, aes(sample=Generosity)) +
+  geom_qq(color = "honeydew3") + geom_qq_line(col="red") + theme_bw() +
+    labs(x= "Generosity")
+
+grid.arrange(happy_qq, gdp_qq,life_expectency_qq,generosity_qq)
+
+
+```
+
+
+From these graphs we could be pretty sure that our data is indeed normally distributed.
+
+
+
+Lets take a look on the happiness score with boxplot.
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+boxplot(whr2015$Happiness_Score, whr2019$Happiness_Score,
+        names = c("2015", "2019"), main = "Happiness Distribution using Boxplot")
+
+```
+\
+\
+
+
+### <ins>Part Three - Modeling</ins>
+
+After we got to know our data better we can now move on to carry out our research.
+
+
+#### <ins>1. Hypothesis test - difference in means</ins>
+
+The happiness index in the world is expected to be the same. 
+We will perform a system of hypotheses to test whether the happiness score has increased over the years and the world is moving towards a better future. We will perform a calculation at a significance level of 5 percent.
+
+Since we compare two samples with the same parameters for the same countries. \
+Each observation in the first sample is paired with a single observation in the second sample and that is why these are paired samples and therefore we will conduct a paired  t-test on them.
+
+$\mu_{1}$: The average score of 2019 report \
+$\mu_{2}$: The average score of 2015 report \
+\
+
+<ins>Hypothesis test:</ins>
+$H_{0}: \mu_{1}-\mu_{2} = 0$ \
+$H_{1}: \mu_{1}-\mu_{2} > 0$ \
+
+```{r,  warning=FALSE, message=FALSE, eval=TRUE}
+t.test(whr2019$Happiness_Score, whr2015$Happiness_Score, paired = TRUE, 
+       alternative = "greater")
+
+```
+
+#### Conclusion:  
+We thought that the overall happiness will increase over the years.
+We compared P-value to the Alpha value and saw that Alpha < P-Value. Therefore we will not reject the null hypothesis at a significance level of 5 percent - the differences between the two years are insignificant.\
+We will conclude that there has been no significant change in the level of happiness in the world.
+
+\
+
+#### <ins>2. Multiple Regression</ins>
+First, we want to see the correlation between the different variables and find simple association rules.
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+numberic_whr <- whr2019 %>%
+  select(Happiness_Score, GDP_per_capita, Life_Expectency, Freedom, Generosity, Corruption)
+
+whr_corr <- cor(numberic_whr)
+
+ggcorrplot(whr_corr, title ="               Correlation Table",
+           hc.order = TRUE, type = "upper", lab = T,
+           ggtheme = ggplot2::theme_gray)
+
+```
+\
+
+We can conclude from the chart that there is a high correlation between <b>happiness score</b>, <b>life expectancy</b> and the <b>GDP index</b>. That is, there is an almost perfect match between these three variables.
+
+Moreover, we can infer that the level of <b>generosity</b> in countries has almost no effect on the <b>life expectancy</b> and the <b>GDP per capita</b>.
+\
+\
+Let's take a look on the linear regression of each variable with the happiness score:
+
+```{r,  warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+
+gg_hs_gdp <- ggplot(whr2019, aes(x=GDP_per_capita, y=Happiness_Score)) +
+  geom_point() +
+  stat_smooth(method = "lm")
+
+gg_hs_le <- ggplot(whr2019, aes(x=Life_Expectency, y=Happiness_Score)) +
+  geom_point() +
+  stat_smooth(method = "lm")
+
+gg_hs_free <- ggplot(whr2019, aes(x=Freedom, y=Happiness_Score)) +
+  geom_point() +
+  stat_smooth(method = "lm")
+
+gg_hs_genr <- ggplot(whr2019, aes(x=Generosity, y=Happiness_Score)) +
+  geom_point() +
+  stat_smooth(method = "lm")
+
+gg_hs_corr <- ggplot(whr2019, aes(x=Corruption, y=Happiness_Score)) +
+  geom_point() +
+  stat_smooth(method = "lm")
+
+grid.arrange(gg_hs_gdp, gg_hs_le, gg_hs_free, gg_hs_genr, gg_hs_corr)
+
+
+```
+\
+
+As observed and stated before GDP per capita, life expectancy and freedom are indeed correlated to the happiness score, whereas generosity and corruption are not that correlated...
+\
+\
+
+Now we can create the linear model using Summary Statistics Table:
+
+```{r}
+
+model <- lm(Happiness_Score ~ GDP_per_capita + Life_Expectency + Freedom + 
+              Generosity + Corruption, data = whr2019)
+summary(model)
+
+```
+
+The first step in interpreting the multiple regression analysis is to examine the F-statistic and the associated p-value, at the bottom of model summary.
+
+In this model, it can be seen that p-value of the F-statistic is < 2.2e-16, which is highly significant. This means that, at least, one of the predictor variables is significantly related to the outcome variable.
+
+By looking at the coefficients table of the variables we can see that there is significant association between <b>GDP per capita, life expectancy</b> and <b>freedom</b> with the outcome variable - <b>the happiness score</b>.
+
+But, <b>generosity</b> and <b>corruption</b> variables are not significant in the model.
+
+Which means that the 74% (R-Squared) of the score of happiness can explained by these variables. 
+\
+
+Because generosity and corruption are not significant we can remove them from the model and get even more accurate model:
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+model2 <- lm(Happiness_Score ~ GDP_per_capita + Life_Expectency + Freedom, data = whr2019)
+summary(model2)
+
+```
+
+As expected the R-Squared went down by a small amount since we dropped two variables from the model.
+Also, the Adjusted R-Squared indeed went up (the closer to 1 the better - we were punished less).
+
+\
+
+But before even making final conclusions we must first check whether our model does meet the assumptions:\
+  -   The residuals are homoscedastic.\
+  -   The residuals are distributed normally.\
+  -   No multicollinearity between the explanatory variables.\
+  \
+ 
+#### Residual Plot
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+residual_upd_model <- model2$residuals
+
+model2 %>% ggplot(aes(x=.fitted,y=.resid)) +
+  geom_point() + geom_hline(yintercept=0) +
+  labs(title="Residual Plot")
+
+```
+\
+\
+
+#### Distribution of the residuals using QQ Plot
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+model2 %>% ggplot(aes(sample=.resid)) +
+  geom_qq() + geom_qq_line(col="red") +
+  labs(title="QQ Plot")
+
+```
+\
+\
+
+#### VIF between the explanatory variables
+
+```{r, warning=FALSE, message=FALSE, eval=TRUE, fig.align = 'center'}
+
+car::vif(model2)
+
+```
+\
+
+<ins>As we can see:</ins> 
+  -   the residuals are hetroscedastic. \
+  -   the residuals are not distributed normally. \
+  -   the VIF between the independent variables is lower than 5 which means they are not correlated. \
+
+It can be seen that assumptions 1 and 2 do not hold, therefore, the model we have created seems to be unsuitable for predicting models.
+\
+\
+
+### Conclusion:
+
+In the project we wanted to study the happiness index among the countries of the world. We selected a database, presented the results and researched them. We studied the variables in each country and their effects on the happiness index. We used a number of models -
+Examining hypotheses for the level of happiness between different countries over the years.
+A multiple regression model on the happiness index with the explanatory variables, and the effect of different variables on the data.
+
+We have come to interesting conclusions about the different countries, their index of happiness and the variables that affect and are affected by happiness.
+
+The project helped us to deeply understand the different tests we learned during the course, how to build them, how to work with them and most important - how to draw interesting conclusions from them.
+
+\
+\
+
+
+
+![](Finding-Happiness.jpg) 
+
+
+
