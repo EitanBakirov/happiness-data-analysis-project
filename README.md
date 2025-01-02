@@ -1,4 +1,4 @@
-# World Happiness Report Data Analysis
+# Unlocking Happiness: Analyzing the World Happiness Report
 
 ## Overview
 
